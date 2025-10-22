@@ -78,21 +78,27 @@ async function retry(fn, retries = CONFIG.maxRetries) {
 /**
  * Utility: Create a new page with optimizations
  */
-async function createOptimizedPage(browser) {
+async function createOptimizedPage(browser, blockResources = true) {
   const page = await browser.newPage();
   
   await page.setUserAgent(CONFIG.userAgent);
   await page.setViewport(CONFIG.viewport);
   
   // Block unnecessary resources
-  await page.setRequestInterception(true);
-  page.on('request', (req) => {
-    if (CONFIG.blockResources.includes(req.resourceType())) {
-      req.abort();
-    } else {
-      req.continue();
-    }
-  });
+  if (blockResources) {
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      try {
+        if (CONFIG.blockResources.includes(req.resourceType())) {
+          req.abort().catch(() => {});
+        } else {
+          req.continue().catch(() => {});
+        }
+      } catch (e) {
+        // Request might already be handled
+      }
+    });
+  }
 
   // Stealth mode
   await page.evaluateOnNewDocument(() => {
@@ -112,15 +118,18 @@ export async function getWebResults(query, options = {}) {
   
   return retry(async () => {
     const browser = await getBrowser();
-    const page = await createOptimizedPage(browser);
+    const page = await createOptimizedPage(browser, true);
     
     try {
+      console.log(`🌐 Searching web for: "${query}"...`);
       const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
       
       await page.goto(searchUrl, { 
-        waitUntil: 'networkidle2', 
+        waitUntil: 'domcontentloaded', 
         timeout: CONFIG.timeout 
       });
+
+      await sleep(1000); // Give page time to render
 
       const content = await page.content();
       const $ = cheerio.load(content);
@@ -142,14 +151,19 @@ export async function getWebResults(query, options = {}) {
         }
       });
 
+      console.log(`✓ Found ${results.length} web results`);
+
       return {
         source: 'duckduckgo',
         query,
         results,
         timestamp: new Date().toISOString()
       };
+    } catch (error) {
+      console.error(`✗ Web search error: ${error.message}`);
+      throw error;
     } finally {
-      await page.close();
+      await page.close().catch(() => {});
     }
   });
 }
@@ -162,20 +176,18 @@ export async function getImageResults(query, options = {}) {
   
   return retry(async () => {
     const browser = await getBrowser();
-    const page = await createOptimizedPage(browser);
-    
-    // Re-enable images for this page
-    await page.setRequestInterception(false);
+    const page = await createOptimizedPage(browser, false); // Don't block images for image search
     
     try {
+      console.log(`🖼️  Searching images for: "${query}"...`);
       const searchUrl = `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&first=1`;
       
       await page.goto(searchUrl, { 
-        waitUntil: 'networkidle2', 
+        waitUntil: 'domcontentloaded', 
         timeout: CONFIG.timeout 
       });
 
-      await sleep(2000); // Allow dynamic content to load
+      await sleep(3000); // Allow dynamic content to load
 
       const images = await page.evaluate((limit) => {
         const results = [];
@@ -204,6 +216,8 @@ export async function getImageResults(query, options = {}) {
         return results;
       }, limit);
 
+      console.log(`✓ Found ${images.length} image results`);
+
       return {
         source: 'bing_images',
         query,
@@ -220,8 +234,11 @@ export async function getImageResults(query, options = {}) {
         })),
         timestamp: new Date().toISOString()
       };
+    } catch (error) {
+      console.error(`✗ Image search error: ${error.message}`);
+      throw error;
     } finally {
-      await page.close();
+      await page.close().catch(() => {});
     }
   });
 }
@@ -234,17 +251,18 @@ export async function getVideoResults(query, options = {}) {
   
   return retry(async () => {
     const browser = await getBrowser();
-    const page = await createOptimizedPage(browser);
+    const page = await createOptimizedPage(browser, true);
     
     try {
+      console.log(`🎥 Searching videos for: "${query}"...`);
       const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
       
       await page.goto(searchUrl, { 
-        waitUntil: 'networkidle2', 
+        waitUntil: 'domcontentloaded', 
         timeout: CONFIG.timeout 
       });
 
-      await sleep(2000);
+      await sleep(3000);
 
       const videos = await page.evaluate((limit) => {
         const results = [];
@@ -271,6 +289,8 @@ export async function getVideoResults(query, options = {}) {
         return results;
       }, limit);
 
+      console.log(`✓ Found ${videos.length} video results`);
+
       return {
         source: 'youtube',
         query,
@@ -287,8 +307,11 @@ export async function getVideoResults(query, options = {}) {
         })),
         timestamp: new Date().toISOString()
       };
+    } catch (error) {
+      console.error(`✗ Video search error: ${error.message}`);
+      throw error;
     } finally {
-      await page.close();
+      await page.close().catch(() => {});
     }
   });
 }
@@ -301,15 +324,18 @@ export async function getNewsResults(query, options = {}) {
   
   return retry(async () => {
     const browser = await getBrowser();
-    const page = await createOptimizedPage(browser);
+    const page = await createOptimizedPage(browser, true);
     
     try {
+      console.log(`📰 Searching news for: "${query}"...`);
       const searchUrl = `https://www.bing.com/news/search?q=${encodeURIComponent(query)}`;
       
       await page.goto(searchUrl, { 
-        waitUntil: 'networkidle2', 
+        waitUntil: 'domcontentloaded', 
         timeout: CONFIG.timeout 
       });
+
+      await sleep(2000);
 
       const content = await page.content();
       const $ = cheerio.load(content);
@@ -337,14 +363,19 @@ export async function getNewsResults(query, options = {}) {
         }
       });
 
+      console.log(`✓ Found ${results.length} news results`);
+
       return {
         source: 'bing_news',
         query,
         results,
         timestamp: new Date().toISOString()
       };
+    } catch (error) {
+      console.error(`✗ News search error: ${error.message}`);
+      throw error;
     } finally {
-      await page.close();
+      await page.close().catch(() => {});
     }
   });
 }
@@ -357,15 +388,18 @@ export async function getBookResults(query, options = {}) {
   
   return retry(async () => {
     const browser = await getBrowser();
-    const page = await createOptimizedPage(browser);
+    const page = await createOptimizedPage(browser, true);
     
     try {
+      console.log(`📚 Searching books for: "${query}"...`);
       const searchUrl = `https://www.goodreads.com/search?q=${encodeURIComponent(query)}`;
       
       await page.goto(searchUrl, { 
-        waitUntil: 'networkidle2', 
+        waitUntil: 'domcontentloaded', 
         timeout: CONFIG.timeout 
       });
+
+      await sleep(2000);
 
       const content = await page.content();
       const $ = cheerio.load(content);
@@ -394,14 +428,19 @@ export async function getBookResults(query, options = {}) {
         }
       });
 
+      console.log(`✓ Found ${results.length} book results`);
+
       return {
         source: 'goodreads',
         query,
         results,
         timestamp: new Date().toISOString()
       };
+    } catch (error) {
+      console.error(`✗ Book search error: ${error.message}`);
+      throw error;
     } finally {
-      await page.close();
+      await page.close().catch(() => {});
     }
   });
 }
@@ -410,14 +449,16 @@ export async function getBookResults(query, options = {}) {
  * BONUS: Query All Sources in Parallel
  */
 export async function queryAllSources(query, options = {}) {
+  console.log(`🔍 Querying all sources for: "${query}"...\n`);
+  
   const limit = pLimit(CONFIG.concurrency);
   
   const tasks = [
-    limit(() => getWebResults(query, options)),
-    limit(() => getImageResults(query, options)),
-    limit(() => getVideoResults(query, options)),
-    limit(() => getNewsResults(query, options)),
-    limit(() => getBookResults(query, options))
+    limit(() => getWebResults(query, options).catch(e => ({ error: e.message }))),
+    limit(() => getImageResults(query, options).catch(e => ({ error: e.message }))),
+    limit(() => getVideoResults(query, options).catch(e => ({ error: e.message }))),
+    limit(() => getNewsResults(query, options).catch(e => ({ error: e.message }))),
+    limit(() => getBookResults(query, options).catch(e => ({ error: e.message })))
   ];
 
   const results = await Promise.allSettled(tasks);
