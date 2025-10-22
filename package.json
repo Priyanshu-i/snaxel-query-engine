@@ -1,0 +1,39 @@
+{
+  "name": "snaxel-query-engine",
+  "version": "1.0.0",
+  "description": "A robust, modular web scraping library for multimodal content discovery",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "snaxel-query": "./cli.js"
+  },
+  "scripts": {
+    "test": "node test.js",
+    "example": "node examples/basic.js"
+  },
+  "keywords": [
+    "web-scraping",
+    "search-engine",
+    "puppeteer",
+    "cheerio",
+    "multimodal",
+    "snaxel"
+  ],
+  "author": "Snaxel Team",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer": "^23.3.0",
+    "cheerio": "^1.0.0-rc.12",
+    "p-limit": "^5.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.55.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/snaxel/snaxel-query-engine.git"
+  }
+}
